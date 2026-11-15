@@ -4,6 +4,7 @@
 // Position is feet-based (x, y=ground height, z); the camera sits at eyeH.
 import { collide, heightAt } from './world.js';
 import { S } from './state.js';
+import { applyArmour } from './armour.js';
 
 export const EYE_STAND = 1.62, EYE_CROUCH = 1.05;
 const SPEED = 4.6, WALK = 2.2, CROUCH = 2.0, ACCEL = 42, RADIUS = 0.35;
@@ -13,7 +14,8 @@ export function createPlayer() {
     x: 0, y: 0, z: 12, yaw: 0, pitch: 0, vy: 0, onGround: true,
     hp: 100, alive: true, crouch: false, moving: false, speed: 0,
     recoil: 0, recoilX: 0,           // pitch kick + horizontal drift
-    weapon: 'kestrel', flash: 0, frag: 0, grenadeSel: 'frag',
+    weapon: 'kestrel', flash: 0, frag: 0, smoke: 0, grenadeSel: 'frag',
+    armour: 0, helmet: false, helmetHits: 0, // Kevlar points + helmet (armour.js)
     mag: {}, reserve: {}, owned: { pip: true },
     plantHeld: 0,
   };
@@ -68,9 +70,10 @@ export function lookDir(p, out) {
   return out;
 }
 
-export function damagePlayer(p, dmg, fromX, fromZ) {
+export function damagePlayer(p, dmg, fromX, fromZ, head) {
   if (!p.alive) return false;
-  p.hp -= dmg;
+  // Kevlar / helmet absorb first (armour.js); only the rest hits HP.
+  p.hp -= applyArmour(p, dmg, !!head);
   // damage direction indicator: angle of the shooter relative to facing
   const dx = fromX - p.x, dz = fromZ - p.z;
   const ang = Math.atan2(dx, dz) - Math.atan2(-Math.sin(p.yaw), -Math.cos(p.yaw));

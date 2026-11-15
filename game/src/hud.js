@@ -8,6 +8,9 @@
 import { S } from './state.js';
 import { WEAPONS, BUY_ORDER, GRENADE_PRICE } from './weapon.js';
 import { PLANT_TIME, DEFUSE_TIME } from './rounds.js';
+import { ARMOUR, armourLabel } from './armour.js';
+import { SMOKE_PRICE } from './smoke.js';
+import { drawMinimap, bindMinimap } from './minimap.js';
 
 const $ = (id) => document.getElementById(id);
 const els = {};
@@ -16,9 +19,11 @@ export function bindHud() {
     'score', 'score-value', 'overlay', 'overlay-title', 'overlay-copy', 'play',
     'health', 'health-num', 'health-fill', 'money', 'timer', 'alive', 'feed',
     'objective', 'dmg', 'buymenu', 'buy-list', 'buy-money', 'buy-timer',
-    'banner', 'banner-title', 'banner-copy', 'scoreboard', 'flash', 'progress', 'progress-fill']) {
+    'banner', 'banner-title', 'banner-copy', 'scoreboard', 'flash', 'progress', 'progress-fill',
+    'armour', 'grenade']) {
     els[id] = $(id);
   }
+  bindMinimap();
   return els;
 }
 
@@ -29,6 +34,13 @@ function fmtTime(t) {
 
 export function updateHud(G) {
   const p = G.player;
+  drawMinimap(G); // live tactical minimap (minimap.js)
+  // armour line under the health bar + selected grenade under the ammo
+  els.armour.textContent = armourLabel(p);
+  els.armour.classList.toggle('none', !p.armour && !p.helmet);
+  const gsel = p.grenadeSel;
+  const gcount = gsel === 'frag' ? p.frag : gsel === 'flash' ? p.flash : p.smoke;
+  els.grenade.textContent = `G: ${gsel.toUpperCase()} x${gcount}  (X cycles)`;
   // crosshair gap from current spread (still/crouched = tight dot)
   const g = p.guns && p.guns[p.weapon];
   const spread = g ? WEAPONS[p.weapon].spread * (p.moving ? 2.1 : 0.7) * (p.crouch ? 0.55 : 1) : 0.01;
@@ -123,6 +135,9 @@ export function showBuyMenu(show, G) {
   }).join('') +
     `<div class="buy-row"><b>6</b> Flash cell — blinds on sight <span>$${GRENADE_PRICE.flash}</span></div>` +
     `<div class="buy-row"><b>7</b> Spark charge — 90 area damage <span>$${GRENADE_PRICE.frag}</span></div>` +
+    `<div class="buy-row ${G.player.armour >= 100 ? 'owned' : ''}"><b>8</b> Kevlar vest — ${ARMOUR.kevlar.desc} <span>${G.player.armour >= 100 ? 'OWNED' : '$' + ARMOUR.kevlar.price}</span></div>` +
+    `<div class="buy-row ${G.player.helmet ? 'owned' : ''}"><b>9</b> Helmet — ${ARMOUR.helmet.desc} <span>${G.player.helmet ? 'OWNED' : '$' + ARMOUR.helmet.price}</span></div>` +
+    `<div class="buy-row"><b>0</b> Smoke grenade — blocks sight 12s <span>$${SMOKE_PRICE}</span></div>` +
     `<div class="buy-note">B or number keys buy · Enter/Ready starts the round</div>`;
 }
 export function showScoreboard(show, G) {

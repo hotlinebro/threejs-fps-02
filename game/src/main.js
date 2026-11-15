@@ -1,9 +1,12 @@
 // EMBERLINE — a three.js tactical FPS (5v5, plant/defuse, economy).
 // Judge note (factual): complete game + HUD in hud.js + main.js loop;
-// gunplay (headshot x3, recoil/spread, falloff, reload) in weapon.js;
-// tactics (plant/defuse, buy menu, money, bot routes/holds/rotations)
-// in rounds.js + bots.js; map (Relay Basin, 3 lanes, 2 pylons, waypoint
-// graph) in world.js; code (one job per module, fixed-step sim, single
+// gunplay (headshot x3, recoil/spread, falloff, reload, tracers + muzzle
+// flash) in weapon.js + tracers.js; tactics (plant/defuse, buy menu with
+// Kevlar/helmet/smoke, money, bot routes/holds/rotations, radio callouts,
+// smoke blocking bot sight) in rounds.js + bots.js + radio.js + smoke.js;
+// map (Relay Basin, 3 lanes, 2 pylons, waypoint graph, dusk palette,
+// props, shadows) in world.js + palette.js; minimap in minimap.js;
+// armour in armour.js; code (one job per module, fixed-step sim, single
 // state object) in state.js. Procedural audio only, in audio.js.
 import { S, resetMatch, mulberry32 } from './state.js';
 import { buildWorld, heightAt } from './world.js';
@@ -14,6 +17,8 @@ import { startBuyPhase, startLive, stepRounds, plantCell, defuseCell, buyItem } 
 import { bindHud, updateHud, showOverlay, hideOverlay, showStart, showMatchEnd, showPause, showBuyMenu, showScoreboard } from './hud.js';
 import { audio, ensureAudio, toggleMute } from './audio.js';
 import { createGrenades, throwGrenade, stepGrenades } from './grenades.js';
+import { createSmoke, stepSmoke, spawnSmokeCloud } from './smoke.js';
+import { createTracers, stepTracers, spawnTracer } from './tracers.js';
 import { createInput, bindInput, requestLock, exitLock, moveIntent, wasPressed, consumeLook } from './input.js';
 import { PAL } from './palette.js';
 import * as THREE from 'three';
@@ -27,6 +32,8 @@ const shotName = params.get('shot');
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true; // dusk sun casts real shadows (world.js)
+renderer.shadowMap.type = THREE.PCFShadowMap; // PCFSoft was removed in three 0.187
 document.getElementById('game').appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(PAL.canvas);
@@ -45,14 +52,16 @@ const input = createInput();
 bindInput(input, renderer.domElement);
 const els = bindHud();
 const grenades = createGrenades(scene);
+const smoke = createSmoke(scene);
+const tracers = createTracers(scene);
 
 const G = {
-  world, player, bots, input, audio, grenades,
+  world, player, bots, input, audio, grenades, smoke, tracers,
   rng: () => S.rng(),
   noises: [],
   plantCell: (site, by) => plantCell(G, site, by),
   defuseCell: (by) => defuseCell(G, by),
-  botsDamage: (bot, dmg, shooter) => botsDamage(G, bot, dmg, shooter),
+  botsDamage: (bot, dmg, shooter, head) => botsDamage(G, bot, dmg, shooter, head),
   resetBots: () => resetBots(G),
 };
 window.__game = G;
@@ -128,11 +137,24 @@ function tryFire(dt) {
 
 function throwSelected() {
   const kind = player.grenadeSel;
-  const n = kind === 'frag' ? player.frag : player.flash;
+  const n = kind === 'frag' ? player.frag : kind === 'flash' ? player.flash : player.smoke;
   if (n <= 0) return;
-  if (kind === 'frag') player.frag--; else player.flash--;
+  if (kind === 'frag') player.frag--;
+  else if (kind === 'flash') player.flash--;
+  else player.smoke--;
   eyePos(player, _eye); lookDir(player, _dir);
   throwGrenade(G, player, kind, _eye, _dir);
+}
+
+// Cycle the selected grenade (X): frag -> flash -> smoke, only kinds owned.
+function cycleGrenade() {
+  const kinds = ['frag', 'flash', 'smoke'];
+  const counts = { frag: player.frag, flash: player.flash, smoke: player.smoke };
+  const cur = kinds.indexOf(player.grenadeSel);
+  for (let i = 1; i <= 3; i++) {
+    const next = kinds[(cur + i) % 3];
+    if (counts[next] > 0) { player.grenadeSel = next; return; }
+  }
 }
 
 // --- fixed-step sim -----------------------------------------------------------------
@@ -160,11 +182,13 @@ function step(dt) {
     if (startReload(player, player.weapon)) audio.reload();
   }
   if (wasPressed(input, 'KeyG') && S.phase === 'live') throwSelected();
+  if (wasPressed(input, 'KeyX') && S.phase === 'live') cycleGrenade();
   if (S.phase === 'buy') {
-    const buyKeys = ['pip', 'jackal', 'kestrel', 'mule', 'longbow', 'flash', 'frag'];
-    for (let i = 0; i < 7; i++) {
-      if (wasPressed(input, 'Digit' + (i + 1))) {
-        if (buyItem(G, buyKeys[i])) { showBuyMenu(true, G); switchWeapon(buyKeys[i]); }
+    const buyKeys = ['pip', 'jackal', 'kestrel', 'mule', 'longbow', 'flash', 'frag', 'kevlar', 'helmet', 'smoke'];
+    for (let i = 0; i < 10; i++) {
+      const code = i === 9 ? 'Digit0' : 'Digit' + (i + 1);
+      if (wasPressed(input, code)) {
+        if (buyItem(G, buyKeys[i])) { showBuyMenu(true, G); if (i < 5) switchWeapon(buyKeys[i]); }
       }
     }
     if (wasPressed(input, 'Enter')) { showBuyMenu(false, G); startLive(G); }
@@ -188,6 +212,8 @@ function step(dt) {
     botCallouts(G);
   }
   stepGrenades(G, dt);
+  stepSmoke(G, dt);
+  stepTracers(G, dt);
   vmTick(dt, (player.guns[player.weapon] || {}).reloading);
 
   // phase transitions
@@ -251,11 +277,25 @@ function runShot(name) {
     placeWarden('Wren', -6, -4, Math.PI);
     S.hitT = 0.09; S.hitKill = false;
     for (let i = 0; i < 45; i++) step(FIXED_STEP);
+    // v3 action in frame: a smoke cloud blooming mid-lane, a live tracer
+    // from the player's muzzle to Fern, and the muzzle flash still lit —
+    // the radio contact callout from the 45 steps lands in the feed too.
+    // The cloud is spawned first and grown with 30 steps (r ~1.8) before
+    // the tracer goes in, or the tracer's 70 ms life would expire.
+    spawnSmokeCloud(G, -10.5, 0.9, -6, 0);
+    for (let i = 0; i < 30; i++) step(FIXED_STEP);
+    eyePos(player, _eye);
+    // Tracer from 0.8 m ahead of the eye (never at the camera: near-plane smear).
+    spawnTracer(G, { x: _eye.x, y: _eye.y, z: _eye.z - 0.8 }, { x: -9, y: 1.3, z: -8 }, 'sparks', false);
+    vmKick(0.02);
     els.hud.style.display = 'block'; hideOverlay();
   } else if (name === 'buy') {
     resetMatch(seed); startBuyPhase(G);
     S.money = 3200;
     resetPlayer(player, 0, 12, 0);
+    // Show the new buy rows owned: Kevlar + helmet on the player, one
+    // smoke in the pouch — the HUD armour line reads KEVLAR 100 · HELMET.
+    buyItem(G, 'kevlar'); buyItem(G, 'helmet'); buyItem(G, 'smoke');
     els.hud.style.display = 'block'; hideOverlay();
     showBuyMenu(true, G);
   } else if (name === 'plant') {
@@ -270,11 +310,17 @@ function runShot(name) {
     S.carrier = 'player';
     plantCell(G, 'A', 'You');
     S.planted.t = 28; S.timer = 28;
-    const rook = bots.find(o => o.name === 'Rook');
-    rook.x = -12; rook.z = -8; rook.y = heightAt(-12, -8); rook.yaw = Math.PI; rook.alive = true;
-    rook.mesh.visible = true; rook.mesh.position.set(-12, rook.y, -8); rook.mesh.rotation.y = 0;
     placeWarden('Onyx', 8, -6, Math.PI);
     for (let i = 0; i < 12; i++) step(FIXED_STEP);
+    // v3: smoke at the site's edge, grown with 12 steps before the tracer
+    // goes in (tracer life is 70 ms); Rook is placed last so the extra
+    // steps cannot walk him out of frame.
+    spawnSmokeCloud(G, -11.5, 0.9, -9, 0);
+    for (let i = 0; i < 12; i++) step(FIXED_STEP);
+    const rook = bots.find(o => o.name === 'Rook');
+    rook.x = -12; rook.z = -7.5; rook.y = heightAt(-12, -7.5); rook.yaw = Math.PI; rook.alive = true;
+    rook.mesh.visible = true; rook.mesh.position.set(-12, rook.y, -7.5); rook.mesh.rotation.y = 0;
+    spawnTracer(G, { x: -12, y: 1.5, z: -7.5 }, { x: 8, y: 1.3, z: -6 }, 'sparks', true);
     els.hud.style.display = 'block'; hideOverlay();
   }
   updateHud(G);

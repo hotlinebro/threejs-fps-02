@@ -6,6 +6,8 @@
 // Plant 3.5 s -> 35 s detonation timer; defuse 5 s channel (hold E).
 import { S, feed, callout } from './state.js';
 import { WEAPONS, BUY_ORDER, GRENADE_PRICE, giveWeapon, gunState } from './weapon.js';
+import { ARMOUR } from './armour.js';
+import { SMOKE_PRICE } from './smoke.js';
 import { resetPlayer } from './player.js';
 
 export const BUY_TIME = 15, ROUND_TIME = 100, END_TIME = 4, DETONATE = 35;
@@ -30,6 +32,24 @@ export function buyItem(G, key) {
     S.money -= price;
     if (key === 'flash') p.flash++; else p.frag++;
     p.grenadeSel = key;
+    return true;
+  }
+  if (key === 'smoke') {
+    if (S.money < SMOKE_PRICE) return false;
+    S.money -= SMOKE_PRICE;
+    p.smoke++; p.grenadeSel = 'smoke';
+    return true;
+  }
+  if (key === 'kevlar') {
+    if (p.armour >= ARMOUR.kevlar.points || S.money < ARMOUR.kevlar.price) return false;
+    S.money -= ARMOUR.kevlar.price;
+    p.armour = ARMOUR.kevlar.points;
+    return true;
+  }
+  if (key === 'helmet') {
+    if (p.helmet || S.money < ARMOUR.helmet.price) return false;
+    S.money -= ARMOUR.helmet.price;
+    p.helmet = true; p.helmetHits = 0;
     return true;
   }
   return false;

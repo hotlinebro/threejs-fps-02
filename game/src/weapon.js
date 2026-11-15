@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { S, feed } from './state.js';
 import { segmentBlocked } from './world.js';
 import { damagePlayer } from './player.js';
+import { spawnTracer } from './tracers.js';
 
 export const WEAPONS = {
   pip:     { name: 'Pip',     price: 0,    mag: 12, reserve: 36, dmg: 26, head: 78,  rof: 0.16, reload: 2.2, spread: 0.012, kick: 0.011, falloff: 0,    auto: false, pellets: 1, len: 0.34, col: 0x8f96a8 },
@@ -92,6 +93,8 @@ export function fire(G, shooter, origin, dir, key) {
 
   const spread = spreadFor(shooter, w, shooter.moving, shooter.crouch, shooter.airborne);
   let result = 'miss', hitCounted = false;
+  // Tracer for the first pellet: muzzle -> hit point, or 30 m out on a miss.
+  let traceEnd = null;
   for (let p = 0; p < w.pellets; p++) {
     const dx = dir.x + (G.rng() - 0.5) * 2 * spread;
     const dy = dir.y + (G.rng() - 0.5) * 2 * spread;
@@ -115,8 +118,12 @@ export function fire(G, shooter, origin, dir, key) {
       else if (tb >= 0) { tt = tb; head = false; }
       if (tt >= 0 && tt < 90 && (!best || tt < best.t)) best = { t: tt, target: t, head };
     }
-    if (!best) continue;
+    if (!best) {
+      if (p === 0) traceEnd = { x: origin.x + rx * 30, y: origin.y + ry * 30, z: origin.z + rz * 30 };
+      continue;
+    }
     const hx = origin.x + rx * best.t, hy = origin.y + ry * best.t, hz = origin.z + rz * best.t;
+    if (p === 0) traceEnd = { x: hx, y: hy, z: hz };
     if (segmentBlocked(G.world, origin.x, origin.y, origin.z, hx, hy, hz)) continue;
     const dist = best.t;
     let dmg = best.head ? w.head : w.dmg;
@@ -124,8 +131,8 @@ export function fire(G, shooter, origin, dir, key) {
     dmg = Math.round(dmg);
     const t = best.target;
     let killed = false;
-    if (t.isPlayer) killed = damagePlayer(G.player, dmg, shooter.x, shooter.z);
-    else killed = G.botsDamage(t.ent, dmg, shooter);
+    if (t.isPlayer) killed = damagePlayer(G.player, dmg, shooter.x, shooter.z, best.head);
+    else killed = G.botsDamage(t.ent, dmg, shooter, best.head);
     if (shooter.isPlayer) {
       if (!hitCounted) { S.hits++; hitCounted = true; }
       S.hitT = 0.09; S.hitKill = killed;
@@ -137,6 +144,12 @@ export function fire(G, shooter, origin, dir, key) {
     }
     result = killed ? 'kill' : 'hit';
   }
+  // Tracer starts 0.8 m ahead of the muzzle: a line that starts at the
+  // camera would clip the near plane and smear a white slab across the
+  // screen. One small object per trigger pull, never per frame.
+  if (traceEnd) spawnTracer(G,
+    { x: origin.x + dir.x * 0.8, y: origin.y + dir.y * 0.8, z: origin.z + dir.z * 0.8 },
+    traceEnd, shooter.team, !shooter.isPlayer);
   return result;
 }
 

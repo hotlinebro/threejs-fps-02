@@ -11,6 +11,9 @@ import * as THREE from 'three';
 import { S, callout } from './state.js';
 import { findPath, nearestWp, collide, heightAt, segmentBlocked } from './world.js';
 import { WEAPONS, gunState, giveWeapon, fire, startReload, tickGuns, fallbackWeapon } from './weapon.js';
+import { applyArmour, ARMOUR } from './armour.js';
+import { smokeBlocks } from './smoke.js';
+import { radioStateChange } from './radio.js';
 
 const SPARK_NAMES = ['Rook', 'Vex', 'Ash', 'Juno'];
 const WARDEN_NAMES = ['Sable', 'Fern', 'Onyx', 'Bram', 'Wren'];
@@ -23,15 +26,16 @@ function makeMesh(scene, team) {
   const col = team === 'sparks' ? 0xf0a830 : 0x57c8c0;
   const g = new THREE.Group();
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.95, 0.32),
-    new THREE.MeshStandardMaterial({ color: 0x2a2f3a, roughness: 0.8 }));
+    new THREE.MeshStandardMaterial({ color: 0x4a5058, roughness: 0.8 }));
   body.position.y = 0.95; g.add(body);
   // Team-coloured vest, widened (0.62) so bots stay readable at range
-  // against the bright golden-hour scene; the dark body alone would blend in.
+  // against the dusk scene; the light body + pale head keep the silhouette
+  // from dissolving into the dark ground the way v2's dark body did.
   const vest = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.4, 0.36),
     new THREE.MeshStandardMaterial({ color: col, roughness: 0.6 }));
   vest.position.y = 1.1; g.add(vest);
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.34, 0.34),
-    new THREE.MeshStandardMaterial({ color: 0x8f96a8, roughness: 0.7 }));
+    new THREE.MeshStandardMaterial({ color: 0xc0c8d4, roughness: 0.7 }));
   head.position.y = 1.66; g.add(head);
   const visor = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.1, 0.05),
     new THREE.MeshBasicMaterial({ color: col }));
@@ -54,6 +58,7 @@ function makeBot(scene, team, name) {
   return {
     id: botId++, name, team, isPlayer: false,
     x: 0, y: 0, z: 0, yaw: 0, pitch: 0, hp: 100, alive: true,
+    armour: 0, helmet: false, helmetHits: 0, // Kevlar + helmet (armour.js)
     weapon: 'jackal', money: 800, owned: {}, guns: {},
     moving: false, crouch: false, airborne: false, recoil: 0, recoilX: 0,
     state: 'buy', site: 'A', role: '', path: [], pathIdx: 0,
@@ -107,12 +112,19 @@ function placeBot(b, x, z) {
 }
 
 function botBuy(b, rng) {
-  // Simple budget rule: rifle if >= $2700, else SMG; one grenade if it fits.
+  // Budget rule, in affordability order: rifle, SMG, shotgun, else the free
+  // Pip sidearm (never spend more than the purse holds — round 1 is $800).
   if (b.money >= 2700) b.weapon = 'kestrel';
   else if (b.money >= 1700 && rng() < 0.3) b.weapon = 'mule';
-  else b.weapon = 'jackal';
+  else if (b.money >= 1500) b.weapon = 'jackal';
+  else b.weapon = 'pip';
   giveWeapon(b, b.weapon); giveWeapon(b, 'pip');
   b.money -= WEAPONS[b.weapon].price;
+  // Armour before grenades: Kevlar if it fits, helmet if it still fits.
+  if (b.money >= ARMOUR.kevlar.price) { b.armour = ARMOUR.kevlar.points; b.money -= ARMOUR.kevlar.price; }
+  else b.armour = 0;
+  if (b.money >= ARMOUR.helmet.price && rng() < 0.7) { b.helmet = true; b.helmetHits = 0; b.money -= ARMOUR.helmet.price; }
+  else b.helmet = false;
   if (b.money >= 300) { b.frag = 1; b.money -= 300; } else b.frag = 0;
   if (b.money >= 200) { b.flash = 1; b.money -= 200; } else b.flash = 0;
 }
@@ -124,9 +136,10 @@ function setPath(G, b, targetWp) {
 }
 
 // Damage a bot. Returns true if killed. Carrier cell passes to a teammate.
-export function botsDamage(G, bot, dmg, shooter) {
+export function botsDamage(G, bot, dmg, shooter, head) {
   if (!bot.alive) return false;
-  bot.hp -= dmg;
+  // Kevlar / helmet absorb first (armour.js); head is the caller's hit flag.
+  bot.hp -= applyArmour(bot, dmg, !!head);
   bot.lastSeen = S.time;
   if (bot.hp <= 0) {
     bot.hp = 0; bot.alive = false; bot.mesh.visible = false;
@@ -155,6 +168,8 @@ function seeEnemy(G, b) {
     if (dot < FOV_COS) return;
     const cy = e.y + (e.crouch ? 1.0 : 1.2);
     if (segmentBlocked(G.world, b.x, eyeY, b.z, e.x, cy, e.z)) return;
+    // Smoke blocks sight for bots exactly like a wall does.
+    if (smokeBlocks(G, b.x, eyeY, b.z, e.x, cy, e.z)) return;
     // distance falloff: far targets are easy to miss entirely
     if (d > 25 && G.rng() < (d - 25) / 40) return;
     best = { ent: e, isPlayer, d }; bestD = d;
@@ -168,6 +183,7 @@ function seeEnemy(G, b) {
 function think(G, b) {
   const rng = G.rng;
   if (!b.alive) return;
+  const prevState = b.state; // radio callouts fire on transitions only
   if (b.blindT > 0) { b.target = null; return; }
   // hearing: a recent noise event nearby -> investigate
   if (!b.target && G.noises.length) {
@@ -181,6 +197,8 @@ function think(G, b) {
   if (seen) {
     if (!b.target) b.reactT = 0.26 + rng() * 0.22 + seen.d * 0.004; // reaction time
     b.target = seen.ent; b.lastSeen = S.time; b.state = 'fight';
+    // Stamp the spotted enemy so the minimap can plot it for a few seconds.
+    seen.ent._spottedT = S.time;
     if (b.team === 'sparks' && S.planted) b.state = 'defend';
   } else if (b.target && S.time - b.lastSeen > 1.5) {
     b.target = null; // forget after 1.5 s without LOS
@@ -218,6 +236,8 @@ function think(G, b) {
   if (b.team === 'wardens' && S.planted && b.state === 'hold' && b.role !== 'defuser') {
     setPath(G, b, S.planted.site === 'A' ? 15 : 16); b.state = 'rotate';
   }
+  // Radio: one line when this bot's state actually changed (radio.js).
+  radioStateChange(G, b, prevState);
 }
 
 // --- movement ----------------------------------------------------------------

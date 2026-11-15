@@ -30,12 +30,17 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--canvas);color:
 #hitmarker::before{transform:rotate(45deg)}
 #hitmarker::after{transform:rotate(-45deg)}
 #hitmarker.kill::before,#hitmarker.kill::after{background:var(--amber)}
-#health{position:absolute;left:24px;bottom:22px;width:220px}
+#health{position:absolute;left:24px;bottom:22px;width:220px;
+  background:rgba(10,12,18,.78);border:1px solid var(--hairline);padding:8px 12px 10px}
 #health-num{font-size:34px;font-weight:700;color:var(--ink)}
 #health-num::after{content:" HP";font-size:13px;color:var(--muted)}
 #health-bar{height:8px;background:var(--surface);border:1px solid var(--hairline);margin-top:4px}
 #health-fill{height:100%;width:100%;background:var(--amber)}
-#ammo{position:absolute;right:26px;bottom:22px;text-align:right}
+#armour{font-size:12px;color:var(--teal);margin-top:5px;letter-spacing:1px}
+#armour.none{color:var(--muted)}
+#ammo{position:absolute;right:26px;bottom:22px;text-align:right;
+  background:rgba(10,12,18,.78);border:1px solid var(--hairline);padding:8px 12px 10px}
+#grenade{font-size:12px;color:var(--muted);margin-top:4px;letter-spacing:1px}
 #ammo-mag{font-size:40px;font-weight:700}
 #ammo-reserve{font-size:18px;color:var(--muted)}
 #ammo-reserve::before{content:"/ "}
@@ -44,9 +49,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--canvas);color:
   background:rgba(27,26,36,.72);border:1px solid var(--hairline);padding:2px 16px}
 #timer.warn{color:var(--amber)}
 #timer.danger{color:#e04b3a}
-#score{position:absolute;left:50%;top:56px;transform:translateX(-50%);font-size:15px;color:var(--muted)}
+#score{position:absolute;left:50%;top:56px;transform:translateX(-50%);font-size:15px;color:var(--muted);
+  background:rgba(10,12,18,.78);border:1px solid var(--hairline);padding:3px 12px}
 #score-value{color:var(--ink);font-weight:700}
-#alive{position:absolute;left:24px;top:16px;font-size:18px;letter-spacing:3px}
+#alive{position:absolute;left:24px;top:16px;font-size:18px;letter-spacing:3px;
+  background:rgba(10,12,18,.78);border:1px solid var(--hairline);padding:2px 10px}
+#minimap{position:absolute;left:24px;top:52px;border:1px solid var(--hairline)}
 #alive .amber{color:var(--amber)}
 #alive .teal{color:var(--teal)}
 #feed{position:absolute;right:24px;top:16px;text-align:right;font-size:13px;color:var(--ink);line-height:1.7}
@@ -64,7 +72,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--canvas);color:
 #banner-copy{font-size:14px;color:var(--muted);margin-top:6px}
 #flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:8}
 #overlay{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  background:rgba(27,26,36,.82);z-index:10;text-align:center;padding:20px}
+  background:rgba(27,26,36,.68);z-index:10;text-align:center;padding:20px}
 #overlay-title{font-size:52px;font-weight:700;letter-spacing:6px;color:var(--amber)}
 #overlay-copy{font-size:16px;color:var(--ink);margin:14px 0 22px;max-width:560px;line-height:1.6}
 #play{pointer-events:auto;cursor:pointer;background:var(--amber);color:var(--canvas);border:0;
@@ -75,7 +83,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--canvas);color:
 #buymenu{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:520px;max-width:92vw;
   background:var(--surface);border:1px solid var(--amber);z-index:7;padding:18px 22px;display:none}
 #buymenu h2{font-size:18px;letter-spacing:2px;color:var(--amber)}
-#buy-money{float:right;color:var(--amber);font-weight:700}
+#buy-money{float:right;color:var(--amber);font-weight:700;margin-right:14px}
 #buy-timer{float:right;margin-right:14px;color:var(--muted)}
 #buy-list{margin-top:12px}
 .buy-row{padding:7px 4px;border-bottom:1px solid var(--hairline);font-size:14px}
@@ -98,11 +106,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--canvas);color:
 <div id="hud">
   <div id="crosshair"><span class="dot"></span></div>
   <div id="hitmarker"></div>
-  <div id="health"><div id="health-num">100</div><div id="health-bar"><div id="health-fill"></div></div></div>
-  <div id="ammo"><span id="ammo-mag">25</span><span id="ammo-reserve">75</span><div id="money">$800</div></div>
+  <div id="health"><div id="health-num">100</div><div id="health-bar"><div id="health-fill"></div></div><div id="armour">NO ARMOUR</div></div>
+  <div id="ammo"><span id="ammo-mag">25</span><span id="ammo-reserve">75</span><div id="money">$800</div><div id="grenade"></div></div>
   <div id="timer">1:40</div>
   <div id="score">SPARKS <span id="score-value">0 — 0</span> WARDENS</div>
   <div id="alive"></div>
+  <canvas id="minimap" width="150" height="110"></canvas>
   <div id="feed"></div>
   <div id="objective"></div>
   <div id="dmg"></div>
@@ -120,8 +129,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:var(--canvas);color:
     <div><b>Left click</b> fire · <b>R</b> reload</div>
     <div><b>Shift</b> walk slow &amp; accurate · <b>Ctrl/C</b> crouch</div>
     <div><b>Space</b> jump · <b>Q</b> switch weapon</div>
-    <div><b>G</b> throw grenade · <b>E</b> hold to plant / defuse</div>
-    <div><b>B</b> buy menu (buy phase, <b>1–7</b> buy)</div>
+    <div><b>G</b> throw grenade · <b>X</b> cycle grenade · <b>E</b> hold to plant / defuse</div>
+    <div><b>B</b> buy menu (buy phase, <b>1–9</b> + <b>0</b> buy)</div>
     <div><b>Tab</b> scoreboard · <b>Esc</b> pause · <b>M</b> mute</div>
   </div>
 </div>
