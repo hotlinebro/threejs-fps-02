@@ -82,7 +82,8 @@ export function resetBots(G) {
   // Wardens: 2 hold A, 1 holds B, 1 roams mid.
   const holds = [17, 19, 18, 10];
   wardens.forEach((b, i) => {
-    const sp = G.world.spawnWardens[i % 4];
+    // Only 3 Warden spawn points for 4 wardens: wrap with % 3 so the 4th shares one.
+    const sp = G.world.spawnWardens[i % 3];
     placeBot(b, sp[0], sp[1]);
     b.yaw = Math.PI; // facing +Z (south, toward Spark spawn)
     b.role = i === 3 ? 'roam' : 'hold';
