@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EMBERLINE — a three.js tactical FPS</title>
+<style>
+:root{
+  --canvas:#1b1a24; --surface:#2a2f3a; --hairline:#3a4152; --ink:#f2ead8;
+  --muted:#8f96a8; --amber:#f0a830; --teal:#57c8c0;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--canvas);color:var(--ink);
+  font-family:ui-monospace,Menlo,Consolas,monospace}
+#game{position:fixed;inset:0}
+#game canvas{display:block}
+#hud{position:fixed;inset:0;pointer-events:none;display:none;z-index:5}
+.hidden{display:none!important}
+/* crosshair: gap widens with spread via --gap */
+#crosshair{position:absolute;left:50%;top:50%;width:0;height:0;--gap:8px}
+#crosshair::before,#crosshair::after{content:"";position:absolute;background:var(--ink)}
+#crosshair::before{left:calc(-1px);top:calc(-1 * var(--gap) - 7px);width:2px;height:7px;
+  box-shadow:0 calc(2 * var(--gap) + 7px) 0 var(--ink)}
+#crosshair::after{top:-1px;left:calc(-1 * var(--gap) - 7px);height:2px;width:7px;
+  box-shadow:calc(2 * var(--gap) + 7px) 0 0 var(--ink)}
+#crosshair .dot{position:absolute;left:-2px;top:-2px;width:4px;height:4px;background:var(--amber);border-radius:50%}
+#hitmarker{position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;
+  opacity:0;transition:opacity .05s}
+#hitmarker::before,#hitmarker::after{content:"";position:absolute;left:12px;top:0;width:2px;height:26px;background:#fff}
+#hitmarker::before{transform:rotate(45deg)}
+#hitmarker::after{transform:rotate(-45deg)}
+#hitmarker.kill::before,#hitmarker.kill::after{background:var(--amber)}
+#health{position:absolute;left:24px;bottom:22px;width:220px}
+#health-num{font-size:34px;font-weight:700;color:var(--ink)}
+#health-num::after{content:" HP";font-size:13px;color:var(--muted)}
+#health-bar{height:8px;background:var(--surface);border:1px solid var(--hairline);margin-top:4px}
+#health-fill{height:100%;width:100%;background:var(--amber)}
+#ammo{position:absolute;right:26px;bottom:22px;text-align:right}
+#ammo-mag{font-size:40px;font-weight:700}
+#ammo-reserve{font-size:18px;color:var(--muted)}
+#ammo-reserve::before{content:"/ "}
+#money{font-size:16px;color:var(--amber);margin-top:2px}
+#timer{position:absolute;left:50%;top:14px;transform:translateX(-50%);font-size:30px;font-weight:700;
+  background:rgba(27,26,36,.72);border:1px solid var(--hairline);padding:2px 16px}
+#timer.warn{color:var(--amber)}
+#timer.danger{color:#e04b3a}
+#score{position:absolute;left:50%;top:56px;transform:translateX(-50%);font-size:15px;color:var(--muted)}
+#score-value{color:var(--ink);font-weight:700}
+#alive{position:absolute;left:24px;top:16px;font-size:18px;letter-spacing:3px}
+#alive .amber{color:var(--amber)}
+#alive .teal{color:var(--teal)}
+#feed{position:absolute;right:24px;top:16px;text-align:right;font-size:13px;color:var(--ink);line-height:1.7}
+#feed div{background:rgba(27,26,36,.66);padding:1px 8px;margin-bottom:3px}
+#objective{position:absolute;left:50%;bottom:96px;transform:translateX(-50%);font-size:14px;
+  color:var(--amber);background:rgba(27,26,36,.72);padding:4px 12px;border:1px solid var(--hairline);white-space:nowrap}
+#dmg{position:absolute;left:50%;top:50%;width:120px;height:120px;margin:-60px 0 0 -60px;opacity:0;
+  border-top:10px solid rgba(224,75,58,.85);border-radius:50%}
+#progress{position:absolute;left:50%;bottom:140px;transform:translateX(-50%);width:260px;height:10px;
+  background:var(--surface);border:1px solid var(--hairline);display:none}
+#progress-fill{height:100%;width:0;background:var(--amber)}
+#banner{position:absolute;left:50%;top:32%;transform:translateX(-50%);text-align:center;display:none;
+  background:rgba(27,26,36,.85);border:1px solid var(--amber);padding:18px 34px}
+#banner-title{font-size:26px;font-weight:700;color:var(--amber)}
+#banner-copy{font-size:14px;color:var(--muted);margin-top:6px}
+#flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:8}
+#overlay{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:rgba(27,26,36,.82);z-index:10;text-align:center;padding:20px}
+#overlay-title{font-size:52px;font-weight:700;letter-spacing:6px;color:var(--amber)}
+#overlay-copy{font-size:16px;color:var(--ink);margin:14px 0 22px;max-width:560px;line-height:1.6}
+#play{pointer-events:auto;cursor:pointer;background:var(--amber);color:var(--canvas);border:0;
+  font:inherit;font-size:18px;font-weight:700;padding:12px 34px;letter-spacing:2px}
+#play:hover{background:var(--ink)}
+.keys{margin-top:26px;font-size:13px;color:var(--muted);line-height:1.9;text-align:left;columns:2;column-gap:48px}
+.keys b{color:var(--ink)}
+#buymenu{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:520px;max-width:92vw;
+  background:var(--surface);border:1px solid var(--amber);z-index:7;padding:18px 22px;display:none}
+#buymenu h2{font-size:18px;letter-spacing:2px;color:var(--amber)}
+#buy-money{float:right;color:var(--amber);font-weight:700}
+#buy-timer{float:right;margin-right:14px;color:var(--muted)}
+#buy-list{margin-top:12px}
+.buy-row{padding:7px 4px;border-bottom:1px solid var(--hairline);font-size:14px}
+.buy-row b{display:inline-block;width:22px;color:var(--amber)}
+.buy-row span{float:right;color:var(--amber)}
+.buy-row.owned span{color:var(--teal)}
+.buy-note{font-size:12px;color:var(--muted);margin-top:10px}
+#scoreboard{position:fixed;left:50%;top:18%;transform:translateX(-50%);width:560px;max-width:92vw;
+  background:rgba(27,26,36,.92);border:1px solid var(--hairline);z-index:7;padding:16px 20px;display:none}
+#scoreboard h3{color:var(--amber);letter-spacing:2px;margin-bottom:8px}
+.sb-row{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--hairline)}
+</style>
+<script type="importmap">
+{"imports":{"three":"./vendor/three/three.module.min.js"}}
+</script>
+</head>
+<body>
+<div id="game"></div>
+<div id="flash"></div>
+<div id="hud">
+  <div id="crosshair"><span class="dot"></span></div>
+  <div id="hitmarker"></div>
+  <div id="health"><div id="health-num">100</div><div id="health-bar"><div id="health-fill"></div></div></div>
+  <div id="ammo"><span id="ammo-mag">25</span><span id="ammo-reserve">75</span><div id="money">$800</div></div>
+  <div id="timer">1:40</div>
+  <div id="score">SPARKS <span id="score-value">0 — 0</span> WARDENS</div>
+  <div id="alive"></div>
+  <div id="feed"></div>
+  <div id="objective"></div>
+  <div id="dmg"></div>
+  <div id="progress"><div id="progress-fill"></div></div>
+  <div id="banner"><div id="banner-title"></div><div id="banner-copy"></div></div>
+</div>
+<div id="buymenu"><h2>BUY PHASE <span id="buy-timer"></span><span id="buy-money"></span></h2><div id="buy-list"></div></div>
+<div id="scoreboard"></div>
+<div id="overlay">
+  <div id="overlay-title">EMBERLINE</div>
+  <div id="overlay-copy">Plant the surge cell on a relay pylon. Hold it till it blows — or stop them trying.</div>
+  <button id="play">CLICK TO PLAY</button>
+  <div class="keys">
+    <div><b>WASD</b> move · <b>Mouse</b> look</div>
+    <div><b>Left click</b> fire · <b>R</b> reload</div>
+    <div><b>Shift</b> walk slow &amp; accurate · <b>Ctrl/C</b> crouch</div>
+    <div><b>Space</b> jump · <b>Q</b> switch weapon</div>
+    <div><b>G</b> throw grenade · <b>E</b> hold to plant / defuse</div>
+    <div><b>B</b> buy menu (buy phase, <b>1–7</b> buy)</div>
+    <div><b>Tab</b> scoreboard · <b>Esc</b> pause · <b>M</b> mute</div>
+  </div>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
