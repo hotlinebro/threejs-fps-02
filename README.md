@@ -1,14 +1,14 @@
 # EMBERLINE — a three.js tactical FPS
 
-A decommissioned solar relay station in a desert basin at dusk. You are a
-**Spark** (amber) attacking with three bot teammates against four **Warden**
+A decommissioned solar relay station in a desert basin at golden hour. You are a
+**Spark** (amber) attacking with four bot teammates against five **Warden**
 bots (teal-slate). Plant the surge cell on Pylon A or B, hold it 35 seconds
 till it blows — or stop them trying.
 
 ## How a match works
 
 - **Buy phase (15 s):** frozen, buy menu open (B or keys 1–7). Start $800.
-- **Round (100 s):** 4v4. Plant (hold E, 3.5 s) → 35 s detonation countdown.
+- **Round (100 s):** 5v5. Plant (hold E, 3.5 s) → 35 s detonation countdown.
   Wardens win by defusing (hold E, 5 s), eliminating all Sparks, or surviving
   the timer. Elimination wins for either side.
 - **Match:** first to 5 round wins, max 9 rounds.
@@ -45,7 +45,7 @@ defend), waypoint graph over three lanes, line-of-sight + ~100° FOV vision
 with distance falloff, hearing for gunfire/plant beeps, 260–480 ms
 reaction, 3–5 round bursts, ~35% first-shot accuracy at 15 m, stuck
 detection with re-routing. Spark bots pick a site (A 45% / B 35% / mid 20%);
-one carries the surge cell. Wardens hold A (2), B (1), roam mid (1), rotate
+one carries the surge cell. Wardens hold A (2), B (2), roam mid (1), rotate
 on plant/sound, and one defuses when the site is clear. Teammates call out
 plants and rotations in the HUD feed.
 
@@ -66,3 +66,5 @@ loops; procedural WebAudio only, no external assets; palette of six colours
 throughout. Map, bots, and economy were designed first (see the design doc),
 then built in order: world → player/weapon → bots → rounds/economy →
 grenades/audio → HUD polish → shot staging.
+
+v2: brighter golden-hour lighting, 5v5, re-staged screenshots.

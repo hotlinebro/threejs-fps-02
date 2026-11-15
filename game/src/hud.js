@@ -55,8 +55,8 @@ export function updateHud(G) {
   els['score-value'].textContent = `${S.score.sparks} — ${S.score.wardens}`;
   const sAlive = (p.alive ? 1 : 0) + G.bots.filter(b => b.alive && b.team === 'sparks').length;
   const wAlive = G.bots.filter(b => b.alive && b.team === 'wardens').length;
-  els.alive.innerHTML = `<span class="amber">${'●'.repeat(sAlive)}${'○'.repeat(4 - sAlive)}</span> ` +
-    `<span class="teal">${'●'.repeat(wAlive)}${'○'.repeat(4 - wAlive)}</span>`;
+  els.alive.innerHTML = `<span class="amber">${'●'.repeat(sAlive)}${'○'.repeat(5 - sAlive)}</span> ` +
+    `<span class="teal">${'●'.repeat(wAlive)}${'○'.repeat(5 - wAlive)}</span>`;
   // kill feed (4 lines) + callouts
   els.feed.innerHTML = [...S.feed, ...S.callouts].slice(0, 4).map(l => `<div>${l}</div>`).join('');
   // objective line

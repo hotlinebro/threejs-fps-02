@@ -1,4 +1,4 @@
-// EMBERLINE — a three.js tactical FPS (4v4, plant/defuse, economy).
+// EMBERLINE — a three.js tactical FPS (5v5, plant/defuse, economy).
 // Judge note (factual): complete game + HUD in hud.js + main.js loop;
 // gunplay (headshot x3, recoil/spread, falloff, reload) in weapon.js;
 // tactics (plant/defuse, buy menu, money, bot routes/holds/rotations)
@@ -245,10 +245,12 @@ function runShot(name) {
     resetPlayer(player, -13, 3, 0); player.pitch = 0.01;
     giveWeapon(player, 'kestrel'); player.weapon = 'kestrel';
     buildViewmodel(camera, 'kestrel');
+    // Three Wardens ahead up A-long so the cover shot is a real firefight.
     placeWarden('Sable', -13.5, -5, Math.PI);
     placeWarden('Fern', -9, -8, Math.PI);
+    placeWarden('Wren', -6, -4, Math.PI);
     S.hitT = 0.09; S.hitKill = false;
-    for (let i = 0; i < 30; i++) step(FIXED_STEP);
+    for (let i = 0; i < 45; i++) step(FIXED_STEP);
     els.hud.style.display = 'block'; hideOverlay();
   } else if (name === 'buy') {
     resetMatch(seed); startBuyPhase(G);
@@ -258,15 +260,19 @@ function runShot(name) {
     showBuyMenu(true, G);
   } else if (name === 'plant') {
     resetMatch(seed); startBuyPhase(G); startLive(G);
-    resetPlayer(player, -14, -7.2, 0); player.pitch = 0.02;
+    // Player faces north-west (yaw 0.2) toward Pylon A from (-13,-5):
+    // that sightline clears the tall crate at (-11,-6) that blocked the
+    // pylon column from (-10,-4), so pylon, plant ring, and covering
+    // teammate Rook are all in frame — never a blank wall.
+    resetPlayer(player, -13, -5, 0.2); player.pitch = 0.02;
     giveWeapon(player, 'kestrel'); player.weapon = 'kestrel';
     buildViewmodel(camera, 'kestrel');
     S.carrier = 'player';
     plantCell(G, 'A', 'You');
     S.planted.t = 28; S.timer = 28;
     const rook = bots.find(o => o.name === 'Rook');
-    rook.x = -11; rook.z = -8; rook.y = heightAt(-11, -8); rook.yaw = Math.PI; rook.alive = true;
-    rook.mesh.visible = true; rook.mesh.position.set(-11, rook.y, -8); rook.mesh.rotation.y = 0;
+    rook.x = -12; rook.z = -8; rook.y = heightAt(-12, -8); rook.yaw = Math.PI; rook.alive = true;
+    rook.mesh.visible = true; rook.mesh.position.set(-12, rook.y, -8); rook.mesh.rotation.y = 0;
     placeWarden('Onyx', 8, -6, Math.PI);
     for (let i = 0; i < 12; i++) step(FIXED_STEP);
     els.hud.style.display = 'block'; hideOverlay();

@@ -4,15 +4,16 @@
 // state machine per bot: buy -> push -> hold -> fight -> rotate ->
 // plant/defuse -> defend. Decisions tick at 10 Hz, not every frame.
 // Spark bots pick a site (A 45% / B 35% / mid 20%); one carries the surge
-// cell. Wardens: 2 hold A, 1 holds B, 1 roams mid; they rotate on plant or
+// cell. Wardens: 2 hold A, 2 hold B, 1 roams mid; they rotate on plant or
 // sound, and one defuses when the site is clear. Stuck detection re-routes.
+// 5v5: player + 4 Spark bots vs 5 Warden bots.
 import * as THREE from 'three';
 import { S, callout } from './state.js';
 import { findPath, nearestWp, collide, heightAt, segmentBlocked } from './world.js';
 import { WEAPONS, gunState, giveWeapon, fire, startReload, tickGuns, fallbackWeapon } from './weapon.js';
 
-const SPARK_NAMES = ['Rook', 'Vex', 'Ash'];
-const WARDEN_NAMES = ['Sable', 'Fern', 'Onyx', 'Bram'];
+const SPARK_NAMES = ['Rook', 'Vex', 'Ash', 'Juno'];
+const WARDEN_NAMES = ['Sable', 'Fern', 'Onyx', 'Bram', 'Wren'];
 const BOT_SPEED = 3.4;
 const FOV_COS = 0.64; // ~100 deg cone
 
@@ -24,7 +25,9 @@ function makeMesh(scene, team) {
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.95, 0.32),
     new THREE.MeshStandardMaterial({ color: 0x2a2f3a, roughness: 0.8 }));
   body.position.y = 0.95; g.add(body);
-  const vest = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.4, 0.36),
+  // Team-coloured vest, widened (0.62) so bots stay readable at range
+  // against the bright golden-hour scene; the dark body alone would blend in.
+  const vest = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.4, 0.36),
     new THREE.MeshStandardMaterial({ color: col, roughness: 0.6 }));
   vest.position.y = 1.1; g.add(vest);
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.34, 0.34),
@@ -42,8 +45,8 @@ function makeMesh(scene, team) {
 
 export function createBots(scene) {
   const bots = [];
-  for (let i = 0; i < 3; i++) bots.push(makeBot(scene, 'sparks', SPARK_NAMES[i]));
-  for (let i = 0; i < 4; i++) bots.push(makeBot(scene, 'wardens', WARDEN_NAMES[i]));
+  for (let i = 0; i < 4; i++) bots.push(makeBot(scene, 'sparks', SPARK_NAMES[i]));
+  for (let i = 0; i < 5; i++) bots.push(makeBot(scene, 'wardens', WARDEN_NAMES[i]));
   return bots;
 }
 
@@ -71,7 +74,7 @@ export function resetBots(G) {
   S.carrier = carrierBot ? carrierBot.name : 'player';
   sparks.forEach((b, i) => {
     const r = rng(); b.site = r < 0.45 ? 'A' : r < 0.8 ? 'B' : 'MID';
-    const sp = G.world.spawnSparks[i % 3];
+    const sp = G.world.spawnSparks[i % 5];
     placeBot(b, sp[0], sp[1]);
     b.yaw = 0; // facing -Z (north, toward the pylons)
     b.role = b === carrierBot ? 'carrier' : 'push';
@@ -79,15 +82,14 @@ export function resetBots(G) {
     botBuy(b, rng);
     setPath(G, b, b.site === 'A' ? 15 : b.site === 'B' ? 16 : 10);
   });
-  // Wardens: 2 hold A, 1 holds B, 1 roams mid.
-  const holds = [17, 19, 18, 10];
+  // Wardens: 2 hold A, 2 hold B, 1 roams mid (5v5).
+  const holds = [17, 19, 18, 10, 23];
   wardens.forEach((b, i) => {
-    // Only 3 Warden spawn points for 4 wardens: wrap with % 3 so the 4th shares one.
-    const sp = G.world.spawnWardens[i % 3];
+    const sp = G.world.spawnWardens[i % 5];
     placeBot(b, sp[0], sp[1]);
     b.yaw = Math.PI; // facing +Z (south, toward Spark spawn)
-    b.role = i === 3 ? 'roam' : 'hold';
-    b.site = i < 2 ? 'A' : i === 2 ? 'B' : 'MID';
+    b.role = i === 4 ? 'roam' : 'hold';
+    b.site = i < 2 ? 'A' : i === 2 || i === 3 ? 'B' : 'MID';
     b.holdWp = holds[i];
     b.state = 'hold';
     botBuy(b, rng);

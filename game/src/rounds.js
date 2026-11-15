@@ -1,6 +1,6 @@
 // rounds.js — round flow + economy (folded in: prices live in weapon.js).
 // Buy phase 15 s (frozen) -> live 100 s -> round end 4 s -> next buy ...
-// Match: first to 5, max 9 rounds (4-4 -> one overtime round; still tied
+// Match: first to 5, max 9 rounds (5-5 -> one overtime round; still tied
 // -> draw). Money: start $800, kill +$300, win +$3,250, loss +$1,900
 // (+$500 per consecutive loss, cap +$3,400), plant +$300 (planter only).
 // Plant 3.5 s -> 35 s detonation timer; defuse 5 s channel (hold E).

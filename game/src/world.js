@@ -1,9 +1,9 @@
-// world.js — "Relay Basin": a 40x28 m solar relay station at dusk.
-// Three lanes (A-long west, MID through the control bunker + catwalk,
-// B-short east), Pylon A (dish mast, NW) and Pylon B (panel array, NE).
-// Collision is axis-aligned boxes only; one shared collider list is used
-// by the player, the bots, and the hitscan wall test. Waypoints (~24 nodes)
-// form the graph bots path over with BFS.
+// world.js — "Relay Basin": a 40x28 m solar relay station in bright
+// golden-hour light. Three lanes (A-long west, MID through the control
+// bunker + catwalk, B-short east), Pylon A (dish mast, NW) and Pylon B
+// (panel array, NE). Collision is axis-aligned boxes only; one shared
+// collider list is used by the player, the bots, and the hitscan wall
+// test. Waypoints (~24 nodes) form the graph bots path over with BFS.
 import * as THREE from 'three';
 import { PAL } from './palette.js';
 
@@ -17,9 +17,9 @@ export function buildWorld(scene) {
   const colliders = [];
   const solid = []; // meshes used for the LOS raycast
   const mat = (c, r = 0.9) => new THREE.MeshStandardMaterial({ color: c, roughness: r, metalness: 0.05 });
-  const mGround = mat(0x232733), mWall = mat(PAL.surface), mCrate = mat(0x4a3b28),
-        mPanel = mat(0x1e3a44, 0.35), mAmber = mat(PAL.amber, 0.5), mTeal = mat(PAL.teal, 0.5),
-        mDark = mat(0x1e2230);
+  const mGround = mat(0x7d6f5c), mWall = mat(PAL.surface), mCrate = mat(0x8a6f4a),
+        mPanel = mat(0x2a5a64, 0.35), mAmber = mat(PAL.amber, 0.5), mTeal = mat(PAL.teal, 0.5),
+        mDark = mat(0x4a4438);
 
   const add = (geo, m, x, y, z, ry = 0, coll = true, h = 99) => {
     const mesh = new THREE.Mesh(geo, m);
@@ -35,15 +35,19 @@ export function buildWorld(scene) {
   };
 
   // --- ground, sky, light -------------------------------------------------
+  // Bright golden-hour: warm tan sky/fog, strong warm sun + cool fill,
+  // high hemisphere so no corner of the map reads black.
   scene.background = new THREE.Color(PAL.canvas);
-  scene.fog = new THREE.Fog(PAL.canvas, 30, 70);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 60), mat(0x232733));
+  scene.fog = new THREE.Fog(PAL.canvas, 45, 110);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 60), mat(0x7d6f5c));
   ground.rotation.x = -Math.PI / 2; scene.add(ground);
-  const sun = new THREE.DirectionalLight(0xffc06a, 2.4);
+  const sun = new THREE.DirectionalLight(0xffd9a0, 3.2);
   sun.position.set(-18, 22, 10); scene.add(sun);
-  scene.add(new THREE.HemisphereLight(0x8a7bd8, 0x2a2118, 0.9));
-  const lampA = new THREE.PointLight(PAL.amber, 30, 18); lampA.position.set(-14, 5, -10); scene.add(lampA);
-  const lampB = new THREE.PointLight(PAL.teal, 30, 18); lampB.position.set(14, 5, -10); scene.add(lampB);
+  const fill = new THREE.DirectionalLight(0x9ab0d8, 0.9);
+  fill.position.set(18, 15, -10); scene.add(fill);
+  scene.add(new THREE.HemisphereLight(0xffd9a0, 0x8a6a4a, 1.8));
+  const lampA = new THREE.PointLight(PAL.amber, 40, 22); lampA.position.set(-14, 5, -10); scene.add(lampA);
+  const lampB = new THREE.PointLight(PAL.teal, 40, 22); lampB.position.set(14, 5, -10); scene.add(lampB);
 
   // --- perimeter walls ----------------------------------------------------
   block(42, 3.2, 1, mWall, 0, 1.6, -14.5); block(42, 3.2, 1, mWall, 0, 1.6, 14.5);
@@ -124,8 +128,8 @@ export function buildWorld(scene) {
   return {
     colliders, solid, wp, adj,
     pylons: { A: { x: -14, z: -10 }, B: { x: 14, z: -10 } },
-    spawnSparks: [[-14, 12], [0, 12], [14, 12]],
-    spawnWardens: [[-14, -12], [0, -12], [14, -12]],
+    spawnSparks: [[-14, 12], [-7, 12], [0, 12], [7, 12], [14, 12]],
+    spawnWardens: [[-14, -12], [-7, -12], [0, -12], [7, -12], [14, -12]],
   };
 }
 
